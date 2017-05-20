@@ -137,6 +137,7 @@ var fixedTimeStep = 1.0 / 60.0; // seconds
 var maxSubSteps = 3;
 
 var lastTime;
+var original_total_speed;
 
 function onLoad() {
     // Setup three.js WebGL renderer. Note: Antialiasing is a big performance hit.
@@ -166,19 +167,18 @@ function onLoad() {
     var loader = new THREE.TextureLoader();
     loader.load('img/box.png', onTextureLoaded);
 
-    // set up the physics world 
+    // set up the physics world
     world = new CANNON.World();
-    //world.gravity.set(0,-0.1,0);
-    
+
     var metal = new CANNON.Material('metal');
     var metal_metal = new CANNON.ContactMaterial(metal, metal, {
         friction: 0.0,
         restitution: 1.0
     });
     world.addContactMaterial(metal_metal);
-    
-    var bounds=[-1,1,0,2,-3,-1];
-    
+
+    var bounds=[-1,1,0.7,2.5,-2.5,-1.5];
+
     var left_plane = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: metal });
     left_plane.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0),Math.PI/2)
     left_plane.position.set(bounds[0],0,0);
@@ -214,18 +214,32 @@ function onLoad() {
     var initial_speed = 1;
     var N_ATOMS = 100;
     for ( var i = 0; i < N_ATOMS; ++i ) {
-        atoms[i] = sphere.clone();
-        atoms[i].position.set( Math.random()*(bounds[1]-bounds[0])+bounds[0],Math.random()*(bounds[3]-bounds[2])+bounds[2],Math.random()*(bounds[5]-bounds[4])+bounds[4] );
-        scene.add( atoms[i] );
+        atoms[i] = { sphere: sphere.clone(), index: i };
+        atoms[i].sphere.position.set( Math.random()*(bounds[1]-bounds[0])+bounds[0],Math.random()*(bounds[3]-bounds[2])+bounds[2],Math.random()*(bounds[5]-bounds[4])+bounds[4] );
+        scene.add( atoms[i].sphere );
         var radius = 0.05; // m
         physics_atoms[i] = new CANNON.Body({
-            mass: 1, // kg
-            position: new CANNON.Vec3(atoms[i].position.x,atoms[i].position.y,atoms[i].position.z), // m
+            mass: 0.1, // kg
+            position: new CANNON.Vec3(atoms[i].sphere.position.x,atoms[i].sphere.position.y,atoms[i].sphere.position.z), // m
             shape: new CANNON.Sphere(radius),
             velocity: new CANNON.Vec3(Math.random()*initial_speed*2-initial_speed,Math.random()*initial_speed*2-initial_speed,Math.random()*initial_speed*2-initial_speed),
             material: metal
         });
+        var s;
+        if(i==0) s=1; else s=0;
+        physics_atoms[i].userData = { state: s, index: i, bonds: [] };
         world.addBody(physics_atoms[i]);
+        physics_atoms[i].addEventListener("collide",function(e){
+            if( e.body.userData && e.target.userData ) {
+                if( e.body.userData.state==1 && e.target.userData.state==0 && !e.body.userData.bonds[e.target.userData.index] ) {
+                    e.body.userData.bonds[e.target.userData.index] = true;
+                    var constraint = new CANNON.DistanceConstraint(e.body, e.target, 0.1);
+                    world.addConstraint(constraint);
+                    e.body.userData.state = 2;
+                    e.target.userData.state = 1;
+                }
+            }
+        });
     }
 
     window.addEventListener('resize', onResize, true);
@@ -276,21 +290,36 @@ function onTextureLoaded(texture) {
     setupStage();
 }
 
-
-
 // Request animation frame loop function
 function animate(time) {
+
+    vrDisplay.requestAnimationFrame(animate);
+
     if(lastTime !== undefined){
         var dt = (time - lastTime) / 1000;
         world.step(fixedTimeStep, dt, maxSubSteps);
     }
     lastTime = time;
 
+    var total_speed = 0;
     for(var i=0;i<atoms.length;++i)
     {
-        atoms[i].position.x = physics_atoms[i].position.x;
-        atoms[i].position.y = physics_atoms[i].position.y;
-        atoms[i].position.z = physics_atoms[i].position.z;
+        atoms[i].sphere.position.x = physics_atoms[i].position.x;
+        atoms[i].sphere.position.y = physics_atoms[i].position.y;
+        atoms[i].sphere.position.z = physics_atoms[i].position.z;
+        total_speed += physics_atoms[i].velocity.length();
+    }
+    if( original_total_speed !== undefined )
+    {
+        for(var i=0;i<atoms.length;++i)
+        {
+            physics_atoms[i].velocity.x *= original_total_speed / total_speed;
+            physics_atoms[i].velocity.y *= original_total_speed / total_speed;
+            physics_atoms[i].velocity.z *= original_total_speed / total_speed;
+        }
+    }
+    else {
+        original_total_speed = total_speed;
     }
 
     // Only update controls if we're presenting.
@@ -299,8 +328,6 @@ function animate(time) {
     }
     // Render the scene.
     effect.render(scene, camera);
-
-    vrDisplay.requestAnimationFrame(animate);
 }
 
 function onResize(e) {
