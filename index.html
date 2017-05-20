@@ -208,13 +208,32 @@ function onLoad() {
     front_plane.position.set(0,0,bounds[5]);
     world.addBody(front_plane);
 
-    var geometry = new THREE.SphereGeometry( 0.05, 10, 10 );
-    var material = new THREE.MeshNormalMaterial();
-    sphere = new THREE.Mesh( geometry, material );
+    var dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(100, 100, 50);
+    scene.add(dirLight);
+    var hemLight = new THREE.HemisphereLight(0xffffff, 0x909090, .6);
+    scene.add(hemLight);
+
+    var geometry = new THREE.SphereGeometry( 0.05, 8, 8 );
     var initial_speed = 1;
     var N_ATOMS = 100;
     for ( var i = 0; i < N_ATOMS; ++i ) {
-        atoms[i] = { sphere: sphere.clone(), index: i };
+        var color = 0xff0000;
+        switch(i%6) {
+            default:
+            case 0: color = "hsl(0,   60%, 50%)"; break;
+            case 1: color = "hsl(60,  40%, 50%)"; break;
+            case 2: color = "hsl(120, 40%, 50%)"; break;
+            case 3: color = "hsl(180, 60%, 50%)"; break;
+            case 4: color = "hsl(240, 60%, 50%)"; break;
+            case 5: color = "hsl(300, 60%, 50%)"; break;
+        }
+        var material = new THREE.MeshPhongMaterial( {
+            color: color,
+            specular: 0xFFFFFF,
+            shininess: 1000
+        } ) ;
+        atoms[i] = { sphere: new THREE.Mesh( geometry, material ), index: i };
         atoms[i].sphere.position.set( Math.random()*(bounds[1]-bounds[0])+bounds[0],Math.random()*(bounds[3]-bounds[2])+bounds[2],Math.random()*(bounds[5]-bounds[4])+bounds[4] );
         scene.add( atoms[i].sphere );
         var radius = 0.05; // m
@@ -227,7 +246,7 @@ function onLoad() {
         });
         var s;
         if(i==0) s=1; else s=0;
-        physics_atoms[i].userData = { state: s, index: i, bonds: [] };
+        physics_atoms[i].userData = { type:i%6, state: s, index: i, bonds: [] };
         world.addBody(physics_atoms[i]);
         physics_atoms[i].addEventListener("collide",function(e){
             if( e.body.userData && e.target.userData ) {
