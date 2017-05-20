@@ -119,7 +119,7 @@ var lastRenderTime = 0;
 // Currently active VRDisplay.
 var vrDisplay;
 // How big of a box to render.
-var boxSize = 5;
+var boxSize = 50;
 // Various global THREE.Objects.
 var scene;
 var cube;
@@ -129,70 +129,75 @@ var camera;
 // EnterVRButton for rendering enter/exit UI.
 var vrButton;
 
+var atoms = [];
+var velocities = [];
+
 
 function onLoad() {
-  // Setup three.js WebGL renderer. Note: Antialiasing is a big performance hit.
-  // Only enable it if you actually need to.
-  var renderer = new THREE.WebGLRenderer({antialias: true});
-  renderer.setPixelRatio(window.devicePixelRatio);
+    // Setup three.js WebGL renderer. Note: Antialiasing is a big performance hit.
+    // Only enable it if you actually need to.
+    var renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-  // Append the canvas element created by the renderer to document body element.
-  document.body.appendChild(renderer.domElement);
+    // Append the canvas element created by the renderer to document body element.
+    document.body.appendChild(renderer.domElement);
 
-  // Create a three.js scene.
-  scene = new THREE.Scene();
+    // Create a three.js scene.
+    scene = new THREE.Scene();
 
-  // Create a three.js camera.
-  var aspect = window.innerWidth / window.innerHeight;
-  camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 10000);
+    // Create a three.js camera.
+    var aspect = window.innerWidth / window.innerHeight;
+    camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 10000);
 
-  controls = new THREE.VRControls(camera);
-  controls.standing = true;
-  camera.position.y = controls.userHeight;
+    controls = new THREE.VRControls(camera);
+    controls.standing = true;
+    camera.position.y = controls.userHeight;
 
-  // Apply VR stereo rendering to renderer.
-  effect = new THREE.VREffect(renderer);
-  effect.setSize(window.innerWidth, window.innerHeight);
+    // Apply VR stereo rendering to renderer.
+    effect = new THREE.VREffect(renderer);
+    effect.setSize(window.innerWidth, window.innerHeight);
 
-  // Add a repeating grid as a skybox.
-  var loader = new THREE.TextureLoader();
-  loader.load('img/box.png', onTextureLoaded);
+    // Add a repeating grid as a skybox.
+    var loader = new THREE.TextureLoader();
+    loader.load('img/box.png', onTextureLoaded);
+    
+    
 
-  // Create 3D objects.
-  var geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-  var material = new THREE.MeshNormalMaterial();
-  cube = new THREE.Mesh(geometry, material);
+    var geometry = new THREE.SphereGeometry( 0.05, 10, 10 );
+    var material = new THREE.MeshNormalMaterial( {color: 0xffff00} );
+    sphere = new THREE.Mesh( geometry, material );
+    var speed = 0.00001;
+    for ( var i = 0; i < 1000; ++i ) {
+        atoms[i] = sphere.clone();
+        atoms[i].position.set( Math.random()*2-1, controls.userHeight+Math.random()*0.2, -4+Math.random() );
+        velocities[i] = {x:Math.random()*speed*2-speed,y:Math.random()*speed*2-speed,z:Math.random()*speed*2-speed};
+        scene.add( atoms[i] );
+    }
 
-  // Position cube mesh to be right in front of you.
-  cube.position.set(0, controls.userHeight, -1);
+    window.addEventListener('resize', onResize, true);
+    window.addEventListener('vrdisplaypresentchange', onResize, true);
 
-  // Add cube mesh to your three.js scene
-  scene.add(cube);
-
-  window.addEventListener('resize', onResize, true);
-  window.addEventListener('vrdisplaypresentchange', onResize, true);
-
-  // Initialize the WebVR UI.
-  var uiOptions = {
-    color: 'black',
-    background: 'white',
-    corners: 'square'
-  };
-  vrButton = new webvrui.EnterVRButton(renderer.domElement, uiOptions);
-  vrButton.on('exit', function() {
-    camera.quaternion.set(0, 0, 0, 1);
-    camera.position.set(0, controls.userHeight, 0);
-  });
-  vrButton.on('hide', function() {
-    document.getElementById('ui').style.display = 'none';
-  });
-  vrButton.on('show', function() {
-    document.getElementById('ui').style.display = 'inherit';
-  });
-  document.getElementById('vr-button').appendChild(vrButton.domElement);
-  document.getElementById('magic-window').addEventListener('click', function() {
-    vrButton.requestEnterFullscreen();
-  });
+    // Initialize the WebVR UI.
+    var uiOptions = {
+        color: 'black',
+        background: 'white',
+        corners: 'square'
+    };
+    vrButton = new webvrui.EnterVRButton(renderer.domElement, uiOptions);
+    vrButton.on('exit', function() {
+        camera.quaternion.set(0, 0, 0, 1);
+        camera.position.set(0, controls.userHeight, 0);
+    });
+    vrButton.on('hide', function() {
+        document.getElementById('ui').style.display = 'none';
+    });
+    vrButton.on('show', function() {
+        document.getElementById('ui').style.display = 'inherit';
+    });
+    document.getElementById('vr-button').appendChild(vrButton.domElement);
+    document.getElementById('magic-window').addEventListener('click', function() {
+        vrButton.requestEnterFullscreen();
+    });
 }
 
 function onTextureLoaded(texture) {
@@ -224,8 +229,17 @@ function animate(timestamp) {
   var delta = Math.min(timestamp - lastRenderTime, 500);
   lastRenderTime = timestamp;
 
-  // Apply rotation to cube mesh
-  cube.rotation.y += delta * 0.0006;
+  // Apply movement
+  var speed = 0.00001*delta;
+  for(var i=0;i<atoms.length;++i)
+  {
+    atoms[i].position.x += velocities[i].x;
+    atoms[i].position.y += velocities[i].y;
+    atoms[i].position.z += velocities[i].z;
+    velocities[i].x += Math.random()*speed*2-speed;
+    velocities[i].y += Math.random()*speed*2-speed;
+    velocities[i].z += Math.random()*speed*2-speed;
+  }
 
   // Only update controls if we're presenting.
   if (vrButton.isPresenting()) {
